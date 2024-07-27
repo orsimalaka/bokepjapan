@@ -8,7 +8,7 @@ export default async function Home({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const page =
-        (searchParams.page && parseInt(searchParams.page as string)) || 1;
+        (searchParams.page && parseInt(searchParams.page as string)) || 51;
     const per_page =
         (searchParams.per_page && parseInt(searchParams.per_page as string)) ||
         DEFAULT_PER_PAGE;
