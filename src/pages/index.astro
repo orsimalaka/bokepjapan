@@ -1,0 +1,235 @@
+---
+// src/pages/index.astro
+import Layout from '../layouts/BaseLayout.astro';
+import VideoCard from '../components/VideoCard.astro';
+import { slugify } from '../utils/slugify';
+import { getAllVideos, type VideoData } from '../utils/data';
+import { terbit, nama, url, desk } from '../utils/site';
+
+export const prerender = true;
+
+const allVideos: VideoData[] = await getAllVideos();
+const videosByCategory: { [key: string]: VideoData[] } = {};
+const numberOfVideosPerCategory = 8;
+
+const usedTitles = new Set<string>();
+
+allVideos.forEach(video => {
+  if (!videosByCategory[video.category]) {
+    videosByCategory[video.category] = [];
+  }
+  videosByCategory[video.category].push(video);
+});
+
+function shuffleArray<T>(array: T[]): T[] {
+  let currentIndex = array.length, randomIndex;
+
+  while (currentIndex !== 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
+const finalVideosByCategory: { [key: string]: VideoData[] } = {};
+const allCategoryNames = Object.keys(videosByCategory);
+
+allCategoryNames.forEach(categoryName => {
+  const videosInThisCategory = videosByCategory[categoryName];
+  
+  const shuffledVideosInThisCategory = shuffleArray([...videosInThisCategory]);
+  
+  const selectedVideosForCategory: VideoData[] = [];
+  
+  for (const video of shuffledVideosInThisCategory) {
+    const normalizedTitle = video.title.toLowerCase().trim();
+    if (!usedTitles.has(normalizedTitle)) {
+      selectedVideosForCategory.push(video);
+      usedTitles.add(normalizedTitle);
+    }
+    if (selectedVideosForCategory.length >= numberOfVideosPerCategory) {
+      break;
+    }
+  }
+  
+  finalVideosByCategory[categoryName] = selectedVideosForCategory;
+});
+
+const sortedCategories = Object.keys(finalVideosByCategory).sort();
+
+const numberOfRandomVideos = 8;
+
+const randomVideos: VideoData[] = [];
+const videosForRandomSelection = allVideos.filter(video => {
+  const normalizedTitle = video.title.toLowerCase().trim();
+  return !usedTitles.has(normalizedTitle);
+});
+
+const shuffledRandomSelection = shuffleArray([...videosForRandomSelection]);
+
+for (const video of shuffledRandomSelection) {
+    const normalizedTitle = video.title.toLowerCase().trim();
+    if (!usedTitles.has(normalizedTitle)) {
+        randomVideos.push(video);
+        usedTitles.add(normalizedTitle);
+    }
+    if (randomVideos.length >= numberOfRandomVideos) {
+        break;
+    }
+}
+
+const preconnectDomains = new Set<string>();
+
+Object.values(finalVideosByCategory).flat().forEach(video => {
+  try {
+    if (video.thumbnail) {
+      preconnectDomains.add(new URL(video.thumbnail).origin);
+    }
+  } catch (e) {
+    console.error(`[ERROR] URL thumbnail tidak valid untuk video ID ${video.id} (videosByRandomCategory):`, e);
+  }
+});
+
+randomVideos.forEach(video => {
+  try {
+    if (video.thumbnail) {
+      preconnectDomains.add(new URL(video.thumbnail).origin);
+    }
+  } catch (e) {
+    console.error(`[ERROR] URL thumbnail tidak valid untuk video ID ${video.id} (randomVideos):`, e);
+  }
+});
+
+const finalPreconnectDomains = Array.from(preconnectDomains);
+
+const currentUrl = url;
+const siteName = nama;
+const siteDescription = desk;
+
+const pageTitle = `${siteName} - Video Bokep Indo Viral Terbaru`;
+const pageDescription = `Nonton video streaming ${siteName} terbaru dan terlengkap gratis. Temukan koleksi video seperti ${sortedCategories.slice(0, 3).join(', ')}${sortedCategories.length > 3 ? ', dan banyak lagi' : ''}.`;
+const pageKeywords = `${siteName}, nonton bokep, video streaming, bokep indo, bokep jepang, bokep jav, bokep barat, video viral, simontok, ${sortedCategories.slice(0, 5).join(', ')}, download bokep`;
+
+let ogImageForHomePage = new URL('/logo.png', url).href;
+
+const firstValidRandomThumbnail = randomVideos.find(video =>
+  video.thumbnail && !video.thumbnail.includes('placeholder.webp')
+);
+
+if (firstValidRandomThumbnail && firstValidRandomThumbnail.thumbnail) {
+  try {
+    new URL(firstValidRandomThumbnail.thumbnail);
+    ogImageForHomePage = firstValidRandomThumbnail.thumbnail;
+  } catch (e) {
+    console.warn(`[WARNING] Thumbnail URL dari 'Video Pilihan Kami' tidak valid atau adalah placeholder, mencoba kategori. Video ID: ${firstValidRandomThumbnail.id || 'Unknown'}`);
+  }
+}
+
+const schemaWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "url": currentUrl,
+  "name": pageTitle,
+  "description": pageDescription,
+  "image": {
+    "@type": "ImageObject",
+    "url": ogImageForHomePage
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": siteName,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${currentUrl}/logo.png`,
+      "width": "300",
+      "height": "200"
+    }
+  },
+  "datePublished": terbit,
+  "dateModified": new Date().toISOString(),
+  "inLanguage": "id-ID"
+};
+
+const schemaBreadcrumb = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": currentUrl
+    }
+  ]
+};
+---
+
+<Layout
+  title={pageTitle}
+  description={pageDescription}
+  siteName={siteName}
+  ogImage={ogImageForHomePage}
+  preconnectDomains={finalPreconnectDomains}
+  siteUrl={currentUrl}
+  keywords={pageKeywords}
+>
+  <script type="application/ld+json" set:html={JSON.stringify(schemaWebPage)} />
+  <script type="application/ld+json" set:html={JSON.stringify(schemaBreadcrumb)} />
+
+  <main class="home-page">
+    <section class="hero-section">
+      <h1 itemprop="headline">Nonton Video Streaming {nama} Terbaru dan Terlengkap</h1>
+      <p itemprop="description">{nama} menyediakan koleksi {siteDescription} secara gratis, dengan update rutin dan kualitas terbaik.</p>
+    </section>
+
+    {randomVideos.length > 0 && (
+      <section class="random-videos-section">
+        <h2 class="section-title">Video Pilihan Kami</h2>
+        <div class="video-grid">
+          {randomVideos.map((video) => (
+            <VideoCard video={video} headingLevel="h3" />
+          ))}
+        </div>
+      </section>
+    )}
+
+    <section class="all-categories-section">
+      {sortedCategories.length === 0 ? (
+        <p class="no-videos-overall">Belum ada video yang tersedia di portal ini.</p>
+      ) : (
+        sortedCategories.map(categoryName => (
+          <div class="category-group">
+            <h2 class="category-title">Video {categoryName} Terbaru</h2>
+            <div class="video-grid">
+              {finalVideosByCategory[categoryName].length === 0 ? (
+                <p class="no-videos-in-category">Tidak ada video dalam kategori ini.</p>
+              ) : (
+                finalVideosByCategory[categoryName].map((video) => (
+                  <VideoCard video={video} headingLevel="h3" />
+                ))
+              )}
+            </div>
+            {videosByCategory[categoryName] && videosByCategory[categoryName].length > numberOfVideosPerCategory && (
+              <div class="view-all-button-container">
+                <a href={`${currentUrl}/category/${slugify(categoryName)}/`} class="view-all-button">Lihat Semua Video {categoryName}</a>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </section>
+   <div class="homepage-long-description">
+     <h2>Situs Nonton Video Streaming {nama} Terbaru dan Terlengkap</h2>
+     <p><strong>{nama}</strong> adalah sumber utama Anda untuk nonton video streaming terbaru dan terlengkap secara gratis. Kami menghadirkan koleksi video dewasa premium dari berbagai genre, termasuk video bokep Indo, Jepang, Jav, dan Barat. Temukan video viral terbaru seperti bocil ngentot, jilbab SMP, mama, SMA, simontok, serta beragam kategori populer lainnya. Nikmati pengalaman menonton terbaik dengan update rutin dan kualitas video pilihan.</p>
+     <p>Koleksi {nama} mencakup {desk} serta video dengan tags populer seperti hub, sotwe, olmek, avtube, pijat, gudang, pemerkosaan, rumah, tobrut, inggris, ngintip, vcs, binor, yandex update, remaja, dan banyak lagi. Kami menyediakan akses ke video full porno dan ngentot yang paling banyak dicari.</p>
+     <p>Jelajahi kumpulan video dari platform terkemuka seperti Xxx, Xnxx, Xvideos, Xhamster, Youporn, Pornhub dan lainnya. Dapatkan juga video eksklusif seperti jilbab ngintip barat, nobokep indo, dan opsi download video ABG hot, coli kontol ipar, nonton film binor terbaru, tetangga sange, live asia toge meki bugil montok putih mulus, sex seragam, bokep69, dan janda muda.</p>
+     <p>Temukan konten seperti <strong>{sortedCategories.slice(0, 5).join(', ')}, Bokep Terbaru</strong>. Selain itu ada juga bocil ngocok, SMA jilbab, cerita Onlyfans terbaru, foto 3gp, bbokep kecil, remaja colmek, awek tetek gede viral, tante bohay, xxx, ngewe hijab, sange teman, film tocil telanjang, artis squirt colmek, download bokepbaru SMP, video anak SMU, tempek Indo, gambar bokep, perawat IGO, bokep terkini, toket toge, bocil memek viral ketagihan, masturbasi puting susu siswi, pelajar indo streaming, kakak twitter, bocah ojol, hot51, meki, video bokep Bandung, adik bogel, dan pidio mabok.</p>
+     <p>Nikmati kategori unik di {nama} seperti Guru Baru, Film Bugil, Video Bugil, Idaman Horni Ayah, Cindo Porno, Bokep Semi, Semi Hijab, Nonton Sebokep Online, Sma Ngewe, China Gojek, rare mabuk Ometv, Asia Perawan, Ukhti Mandi Vcs, Cewek Ngentot, ABG Xbokep, Cantik Ngentot, Cina Seks, dan Video Sex. Kami juga menyajikan kumpulan live Doodstream, adegan crot dalam, RuangBokep Tante Bohai, Anal Jablay Seksi, Toket Cewek Sange, Ngangkang Tobrut Jepang, Cewe No Sensor, Gangbang Terbaru, Sub Indo Prank, JAV HD, JAV no sensor, serta {nama} Wiki Mango Tanpa Sensor. Unduh bokep terlengkap sekarang!</p>
+     <p>Disclaimer {nama}</p>
+     <p>Situs {nama} ini dibuat hanya untuk hiburan. Seluruh konten di situs ini mengandung materi dewasa atau Pornografi yang ditujukan khusus untuk usia 21 tahun ke atas. Jika Anda belum cukup umur, silakan segera tinggalkan situs ini. Dengan mengakses dan menggunakan situs ini, Anda secara sadar bertanggung jawab penuh atas tindakan Anda sendiri. Perlu diketahui, semua konten video di {nama} berasal dari pihak ketiga; kami tidak memproduksi, mengunggah, atau memperjualbelikannya.</p>
+   </div>
+  </main>
+</Layout>

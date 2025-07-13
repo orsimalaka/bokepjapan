@@ -1,0 +1,361 @@
+---
+// src/pages/[slug].astro
+
+import Layout from '../layouts/BaseLayout.astro';
+import VideoCard from '../components/VideoCard.astro';
+import { getAllVideos, type VideoData } from '../utils/data';
+import { slugify } from '../utils/slugify';
+import { desk, nama, terbit, url } from '../utils/site';
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const allVideos: VideoData[] = await getAllVideos();
+  return allVideos.map(video => ({
+    params: { slug: `${slugify(video.title)}-${video.id}` },
+    props: { video, allVideos },
+  }));
+}
+
+const { video, allVideos } = Astro.props;
+const numberOfRelatedVideos = 7;
+let relatedVideos: VideoData[] = [];
+
+const currentVideoTitleKeywords = video.title
+  .toLowerCase()
+  .split(/\s+/)
+  .filter(word => word.length > 2 && !['yang', 'dan', 'atau', 'di', 'ke', 'dari', 'untuk', 'dengan', 'pada', 'adalah',
+  'itu', 'ini', 'mereka', 'dia', 'saya', 'kami', 'kita', 'kamu', 'anda', 'mereka',
+  'tidak', 'bukan', 'akan', 'sudah', 'telah', 'belum', 'ada', 'pun', 'saja', 'juga',
+  'hanya', 'sangat', 'lebih', 'paling', 'saat', 'ketika', 'jika', 'agar', 'supaya',
+  'tetapi', 'namun', 'serta', 'seperti', 'yaitu', 'yakni', 'ialah', 'adapun', 'maka',
+  'oleh', 'sejak', 'tanpa', 'melalui', 'tentang', 'terhadap',
+  'begitu', 'begini', 'sini', 'situ', 'mana', 'siapa', 'apa', 'mengapa',
+  'bagaimana', 'dimana', 'kapan', 'kalau', 'walaupun', 'meskipun', 'bahkan', 'hingga',
+  'sampai', 'baik', 'buruk',
+].includes(word));
+
+const candidateVideos = allVideos.filter(v => 
+    v.id !== video.id && 
+    v.title.toLowerCase() !== video.title.toLowerCase() 
+);
+
+const scoredCandidates = candidateVideos.map(v => {
+  let score = 0;
+  const otherVideoTitle = v.title.toLowerCase();
+
+  if (v.category === video.category) {
+    score += 100;
+  }
+
+  currentVideoTitleKeywords.forEach(keyword => {
+    if (otherVideoTitle.includes(keyword)) {
+      score += 5;
+    }
+  });
+
+  return { video: v, score };
+});
+
+function shuffleArray<T>(array: T[]): T[] {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex !== 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
+scoredCandidates.sort((a, b) => b.score - a.score);
+const groupedByScore = scoredCandidates.reduce((acc, curr) => {
+  (acc[curr.score] = acc[curr.score] || []).push(curr);
+  return acc;
+}, {} as Record<number, typeof scoredCandidates>);
+
+let shuffledScoredCandidates: typeof scoredCandidates = [];
+Object.keys(groupedByScore).sort((a,b) => parseInt(b) - parseInt(a)).forEach(score => {
+  shuffledScoredCandidates.push(...shuffleArray(groupedByScore[parseInt(score)]));
+});
+
+
+const addedVideoIds = new Set<string>();
+const addedVideoTitles = new Set<string>();
+
+for (const scoredV of shuffledScoredCandidates) {
+  if (relatedVideos.length >= numberOfRelatedVideos) {
+    break;
+  }
+  const lowerCaseTitle = scoredV.video.title.toLowerCase();
+  if (!addedVideoIds.has(scoredV.video.id) && !addedVideoTitles.has(lowerCaseTitle)) {
+    relatedVideos.push(scoredV.video);
+    addedVideoIds.add(scoredV.video.id);
+    addedVideoTitles.add(lowerCaseTitle);
+  }
+}
+
+if (relatedVideos.length < numberOfRelatedVideos) {
+  const remainingSlots = numberOfRelatedVideos - relatedVideos.length;
+  const otherVideosForRandom = allVideos.filter(v => 
+    v.id !== video.id && 
+    v.title.toLowerCase() !== video.title.toLowerCase() && 
+    !addedVideoIds.has(v.id) &&
+    !addedVideoTitles.has(v.title.toLowerCase())
+  );
+  const shuffledOthersForRandom = shuffleArray(otherVideosForRandom);
+  relatedVideos.push(...shuffledOthersForRandom.slice(0, remainingSlots));
+}
+
+const numberOfRandomVideos = 8; 
+const currentAndRelatedVideoIds = new Set([video.id, ...relatedVideos.map(v => v.id)]);
+const currentAndRelatedVideoTitles = new Set([video.title.toLowerCase(), ...relatedVideos.map(v => v.title.toLowerCase())]);
+
+const videosForRandomSelection = allVideos.filter(v => 
+    !currentAndRelatedVideoIds.has(v.id) &&
+    !currentAndRelatedVideoTitles.has(v.title.toLowerCase())
+);
+
+const randomVideos = shuffleArray(videosForRandomSelection)
+  .slice(0, numberOfRandomVideos);
+
+const allDomains = new Set<string>();
+try {
+  if (video.thumbnail) allDomains.add(new URL(video.thumbnail).origin);
+  if (video.embedUrl) allDomains.add(new URL(video.embedUrl).origin);
+} catch (e) {
+  console.error(`URL thumbnail/video tidak valid untuk video ID ${video.id} (current video):`, e);
+}
+
+relatedVideos.forEach(v => {
+  try {
+    if (v.thumbnail) allDomains.add(new URL(v.thumbnail).origin);
+    if (v.embedUrl) allDomains.add(new URL(v.embedUrl).origin);
+  } catch (e) {
+    console.error(`URL thumbnail/video tidak valid untuk video ID ${v.id} (related video):`, e);
+  }
+});
+
+randomVideos.forEach(v => {
+  try {
+    if (v.thumbnail) allDomains.add(new URL(v.thumbnail).origin);
+    if (v.embedUrl) allDomains.add(new URL(v.embedUrl).origin);
+  } catch (e) {
+    console.error(`URL thumbnail/video tidak valid untuk video ID ${v.id} (random video):`, e);
+  }
+});
+
+const preconnectDomains = Array.from(allDomains);
+
+const breadcrumbs = [
+  { name: 'Home', url: `${url}` },
+  { name: video.category, url: `${url}/category/${slugify(video.category)}/` },
+  { name: video.title },
+];
+
+const datePublished = video.datePublished || terbit;
+const dateModified = video.dateModified || new Date().toISOString();
+
+function toISO8601Duration(seconds: number | string): string {
+  if (typeof seconds === 'string') {
+    seconds = parseInt(seconds, 10);
+  }
+  if (isNaN(seconds) || seconds < 0) {
+    return 'PT26S'; 
+  }
+
+  const hours = Math.floor(seconds / 3600);
+  seconds %= 3600;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  let durationString = 'PT';
+  if (hours > 0) durationString += `${hours}H`;
+  if (minutes > 0) durationString += `${minutes}M`;
+  if (remainingSeconds > 0) durationString += `${remainingSeconds}S`;
+
+  if (durationString === 'PT') {
+    return 'PT26S';
+  }
+  return durationString;
+}
+
+const formattedDuration = toISO8601Duration(video.duration || 26);
+
+const schemaWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "url": `${url}/${slugify(video.title)}-${video.id}/`,
+  "name": `${video.title}`,
+  "description": `Video bokep viral ${video.title} yang terbaru kategori ${video.category} nonton streaming di link ${nama}`,
+  "image": {
+    "@type": "ImageObject",
+    "url": video.thumbnail
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": nama,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${url}/logo.png`,
+      "width": "300",
+      "height": "200"
+    }
+  },
+  "datePublished": datePublished,
+  "dateModified": dateModified,
+  "inLanguage": "id-ID"
+};
+
+const schemaVideoObject = {
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "name": video.title,
+  "description": `Video bokep viral ${video.title} yang terbaru kategori ${video.category} nonton streaming di link ${nama}`,
+  "uploadDate": datePublished,
+  "embedUrl": video.embedUrl,
+  "thumbnailUrl": video.thumbnail,
+  "duration": formattedDuration,
+  "interactionCount": video.duration || "5496",
+  "keywords": video.tags ? video.tags.split(',').map(tag => tag.trim()).join(', ') : video.title,
+  "publisher": {
+    "@type": "Organization",
+    "name": nama,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${url}/logo.png`,
+      "width": "300",
+      "height": "200"
+    }
+  },
+};
+
+const schemaBreadcrumb = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": breadcrumbs.map((item, index) => ({
+    "@type": "ListItem",
+    "position": index + 1,
+    "name": item.name,
+    ...(item.url && { "item": item.url })
+  }))
+};
+const videoTags = typeof video.tags === 'string' && video.tags.length > 0
+  ? video.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+  : [];
+---
+
+<Layout
+  title={`${video.title} - ${nama}`}
+  description={`Video bokep viral ${video.title} yang terbaru kategori ${video.category} nonton streaming di link ${nama}`}
+  siteName={nama}
+  preconnectDomains={preconnectDomains}
+  siteUrl={url}
+  ogImage={video.thumbnail}
+>
+  <script type="application/ld+json" set:html={JSON.stringify(schemaWebPage)} />
+  <script type="application/ld+json" set:html={JSON.stringify(schemaVideoObject)} />
+  <script type="application/ld+json" set:html={JSON.stringify(schemaBreadcrumb)} />
+
+  <main class="video-detail-page">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <ol vocab="https://schema.org/" typeof="BreadcrumbList">
+        {breadcrumbs.map((item, index) => (
+          <li property="itemListElement" typeof="ListItem">
+            {index > 0 && <span class="separator" aria-hidden="true">/</span>}
+            {item.url ? (
+              <a property="item" typeof="WebPage" href={item.url}>
+                <span property="name">{item.name}</span>
+              </a>
+            ) : (
+              <span property="name">{item.name}</span>
+            )}
+            <meta property="position" content={(index + 1).toString()} />
+          </li>
+        ))}
+      </ol>
+    </nav>
+
+    <article>
+      <div class="video-player-container">
+        <iframe
+          src={video.embedUrl}
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+          loading="eager"
+          width="100%"
+          height="500"
+          title={video.title}
+        ></iframe>
+      </div>
+      <h1 class="video-title" itemprop="headline">{video.title}</h1>
+    </article>
+
+    <script type="text/javascript" src="https://js.juicyads.com/jp.php?c=947403z2v256s2w2x2f4x2c4&u=https%3A%2F%2Fwww.juicyads.rocks"></script>
+    <script type="text/javascript"> var juicy_tags = ['a', 'img']; </script>
+    <script type="text/javascript" src="https://js.juicyads.com/jp.php?c=947403z2v256s2w2x2f4x2c4&u=https%3A%2F%2Fwww.juicyads.rocks"></script>
+    <div class="juicyads-ad-container" style="min-height: 100px; width: 100%; display: flex; justify-content: center; align-items: center; background-color: var(--card-bg); border-radius: var(--border-radius-medium); margin-bottom: var(--spacing-unit);">
+      <ins id="1078976" data-width="300" data-height="100"></ins>
+      <script type="text/javascript" data-cfasync="false" async>(adsbyjuicy = window.adsbyjuicy || []).push({'adzone':1078976});</script>
+    </div>
+
+<div class="video-description-container">
+  <p class="video-description" itemprop="description">Video bokep viral {video.title} yang terbaru kategori {video.category} nonton streaming di link {nama}</p>
+  <div id="fullDescriptionContent" style="display: none;">
+    <p>Di <strong>{nama}</strong>, video berjudul <strong>{video.title}</strong> adalah konten terbaru di kategori <strong>{video.category}</strong>. Jangan lewatkan video ini dan jelajahi koleksi video menakjubkan kami lainnya tentang {video.category}. {desk} senantiasa menyajikan konten berkualitas tinggi untuk pengalaman menonton terbaik Anda.</p>
+    <p>Situs {nama} adalah sumber utama untuk nonton video streaming terbaru dan terlengkap secara gratis. Kami menyediakan koleksi video yang beragam, termasuk konten viral dari Bokep Indo, Jepang, Jav, dan Barat. Anda bisa menemukan video terbaru seperti bocil ngentot, jilbab SMP, mama, SMA, simontok, dan berbagai genre lainnya. Nikmati juga berbagai kategori populer seperti hub, sotwe, olmek, avtube, pijat, gudang, pemerkosaan, rumah, tobrut, inggris, ngintip, vcs, binor, yandex update, remaja, serta video full porno dan ngentot.</p>
+    <p>Jelajahi koleksi kami yang meliputi konten dari Xxx, Xnxx, Xvideos, Xhamster, Youporn, Pornhub, termasuk video jilbab ngintip, bokep barat, dan nobokep indo. Kami juga menyediakan akses untuk download video colmek toket ABG hot, coli kontol ipar, nonton film binor terbaru, tetangga sange, live asia toge meki bugil montok putih mulus, sex seragam, bokep69, janda muda, dan adegan intim lainnya.</p>
+    <p>Temukan video seperti bocil ngocok, SMA jilbab, cerita onlyfans terbaru, foto 3gp, Bbokep kecil, remaja colmek, awek tetek gede Viral tante bohay, xxx, ngewe hijab, sange teman, film tocil telanjang, artis squirt colmek, bokepbaru SMP, video anak SMU, tempek indo, gambar bokep, perawat IGO, bokep terkini, toket toge, bocil memek viral dewasa ketagihan, Masturbasi puting susu siswi, pelajar indo streaming, kakak twitter, bocah ojol, hot51, meki, video bokep Bandung, adik bogel, dan pidio mabok.</p>
+    <p>Koleksi kami juga mencakup berbagai kategori unik seperti Guru Baru, Film Bugil, SMP viral, Idaman Horni Ayah, Cindo Porno, Bokep Semi, Semi Hijab, Nonton Sebokep Online, Sma Ngewe, China Gojek, rare mabuk ometv, Asia Perawan, Ukhti Mandi Vcs, Cewek Ngentot, ABG Xbokep {video.title} Cantik Ngentot, Cina Seks, Video Sex. Selain itu, tersedia kumpulan live doodstream, adegan crot dalam, RuangBokep Tante Bohai, Anal Jablay Seksi, Toket Cewek Sange, Ngangkang Tobrut Jepang, Cewe No Sensor, Gangbang Terbaru, Sub Indo Prank, JAV HD, JAV no sensor, dan {nama} Wiki Mango Tanpa Sensor. Unduh bokep terlengkap sekarang! {videoTags.length > 0 && ( <span style="font-weight: normal; font-style: italic;"> Temukan juga dengan tags terkait: {videoTags.join(', ')}.</span>
+      )}
+    </p>
+  </div>
+  <button id="toggleFullDescription" class="toggle-description-button">Tampilkan Deskripsi Lengkap</button>
+</div>
+{videoTags.length > 0 && (
+      <section class="video-tags-section">
+        <h2 class="section-title">Tags:</h2>
+        <div class="tags-list">
+          {videoTags.map(tag => (
+            <a href={`${url}/video/${slugify(tag)}/`} class="tag-chip" rel="tag">
+              {tag}
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {relatedVideos.length > 0 && (
+      <section class="related-videos-section">
+        <h2 class="section-title">Video Terkait {video.title}</h2>
+        <div class="video-grid">
+          <script type="text/javascript" data-cfasync="false" async src="https://poweredby.jads.co/js/jads.js"></script>
+          <ins id="1094678" data-width="300" data-height="262"></ins>
+          <script type="text/javascript" data-cfasync="false" async>(adsbyjuicy = window.adsbyjuicy || []).push({'adzone':1094678});</script>
+          {relatedVideos.map((relatedVideo) => (
+            <VideoCard video={relatedVideo} videoDetailPath={`/${slugify(relatedVideo.title)}-${relatedVideo.id}/`} headingLevel="h3" />
+          ))}
+        </div>
+      </section>
+    )}
+    
+    {randomVideos.length > 0 && (
+      <section class="random-videos-section">
+        <div class="juicyads-ad-container" style="min-height: 262px; width: 100%; display: flex; justify-content: center; align-items: center; background-color: var(--card-bg); border-radius: var(--border-radius-medium); margin-bottom: var(--spacing-unit);">
+          <script type="text/javascript" data-cfasync="false" async src="https://poweredby.jads.co/js/jads.js"></script>
+          <ins id="1058210" data-width="300" data-height="262"></ins>
+          <script type="text/javascript" data-cfasync="false" async>(adsbyjuicy = window.adsbyjuicy || []).push({'adzone':1058210});</script>
+        </div>
+        <div class="video-grid">
+          {randomVideos.map((randomVideo) => (
+            <VideoCard video={randomVideo} videoDetailPath={`/${slugify(randomVideo.title)}-${randomVideo.id}/`} headingLevel="h3" />
+          ))}
+        </div>
+      </section>
+    )}
+     <p>Disclaimer {nama}</p>
+     <p>Situs {nama} dengan video berjudul {video.title} ini dibuat hanya untuk hiburan. Seluruh konten di situs ini mengandung materi dewasa atau Pornografi yang ditujukan khusus untuk usia 21 tahun ke atas. Jika Anda belum cukup umur, silakan segera tinggalkan situs ini. Dengan mengakses dan menggunakan situs ini, Anda secara sadar bertanggung jawab penuh atas tindakan Anda sendiri. Perlu diketahui, semua konten video di {nama} berasal dari pihak ketiga; kami tidak memproduksi, mengunggah, atau memperjualbelikannya.</p>
+  </main>
+<script is:inline>document.addEventListener('DOMContentLoaded',()=>{const toggleButton=document.getElementById('toggleFullDescription');const fullDescriptionContent=document.getElementById('fullDescriptionContent');if(toggleButton&&fullDescriptionContent){if(fullDescriptionContent.children.length===0||fullDescriptionContent.textContent.trim().length===0){toggleButton.style.display='none'}toggleButton.addEventListener('click',()=>{if(fullDescriptionContent.style.display==='none'){fullDescriptionContent.style.display='block';toggleButton.textContent='Sembunyikan Deskripsi'}else{fullDescriptionContent.style.display='none';toggleButton.textContent='Tampilkan Deskripsi Lengkap'}})}});</script>
+</Layout>

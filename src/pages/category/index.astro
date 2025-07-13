@@ -1,0 +1,175 @@
+---
+// src/pages/category/index.astro
+import Layout from '../../layouts/BaseLayout.astro';
+import { getAllVideos, type VideoData } from '../../utils/data';
+import { slugify } from '../../utils/slugify';
+export const prerender = true;
+import { desk, nama, url, terbit } from '../../utils/site';
+
+const allVideos: VideoData[] = await getAllVideos();
+
+const categoryData: { [key: string]: { count: number; thumbnails: string[]; } } = {};
+const allThumbnailDomains = new Set<string>();
+
+allVideos.forEach(video => {
+  if (typeof video.category !== 'string' || video.category.trim() === '') {
+    console.warn(`[WARNING] Melewatkan video ID ${video.id || 'Unknown'} karena kategori tidak valid atau kosong: '${video.category}' di halaman kategori index.`);
+    return;
+  }
+
+  if (!categoryData[video.category]) {
+    categoryData[video.category] = {
+      count: 0,
+      thumbnails: []
+    };
+  }
+  categoryData[video.category].count++;
+
+  if (video.thumbnail) {
+    try {
+      new URL(video.thumbnail);
+      categoryData[video.category].thumbnails.push(video.thumbnail);
+      allThumbnailDomains.add(new URL(video.thumbnail).origin);
+    } catch (e) {
+      console.error(`[ERROR] Invalid thumbnail URL for video ID ${video.id || 'Unknown'} in category data collection:`, e);
+    }
+  }
+});
+
+const categories = Object.keys(categoryData)
+  .map(categoryName => {
+    const categoryInfo = categoryData[categoryName];
+    let selectedThumbnail: string | null = null;
+
+    if (categoryInfo.thumbnails.length > 0) {
+      const randomIndex = Math.floor(Math.random() * categoryInfo.thumbnails.length);
+      selectedThumbnail = categoryInfo.thumbnails[randomIndex];
+    }
+
+    return {
+      name: categoryName,
+      count: categoryInfo.count,
+      slug: slugify(categoryName),
+      thumbnail: selectedThumbnail
+    };
+  })
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+let ogImageForCategoryPage = new URL('/logo.png', url).href;
+
+if (categories.length > 0) {
+  const categoryWithValidThumbnail = categories.find(cat =>
+    cat.thumbnail && !cat.thumbnail.includes('placeholder.webp')
+  );
+  if (categoryWithValidThumbnail && categoryWithValidThumbnail.thumbnail) {
+    try {
+      new URL(categoryWithValidThumbnail.thumbnail);
+      ogImageForCategoryPage = categoryWithValidThumbnail.thumbnail;
+    } catch (e) {
+      console.warn(`[WARNING] URL thumbnail untuk kategori ${categoryWithValidThumbnail.name} tidak valid atau adalah placeholder, menggunakan logo.png.`, e);
+    }
+  }
+}
+
+const breadcrumbs = [
+  { name: 'Home', url: `${url}` },
+  { name: 'Kategori' },
+];
+
+const schemaBreadcrumb = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": breadcrumbs.map((item, index) => ({
+    "@type": "ListItem",
+    "position": index + 1,
+    "name": item.name,
+    ...(item.url && { "item": item.url })
+  }))
+};
+
+const schemaWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "url": `${url}/category/`,
+  "description": `Jelajahi berbagai kategori video ${nama} terlengkap. Temukan video berdasarkan ${categories.slice(0, 3).map(cat => cat.name).join(', ')}${categories.length > 3 ? ', dan banyak kategori lainnya' : ''}.`,
+  "name": `Daftar Kategori Video - ${nama}`,
+    "image": {
+    "@type": "ImageObject",
+    "url": ogImageForCategoryPage
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": nama,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${url}/logo.png`
+    }
+  },
+  "inLanguage": "id-ID",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": `${url}/category/`
+  }
+};
+
+const pageKeywords = `kategori video, daftar kategori, ${nama} kategori, nonton video gratis, ${categories.map(cat => cat.name).join(', ')}`;
+
+---
+
+<Layout
+  title={`Daftar Kategori Video | ${nama} - Nonton Online Gratis`}
+  description={`Jelajahi berbagai kategori video ${nama} terlengkap. Temukan video berdasarkan ${categories.slice(0, 3).map(cat => cat.name).join(', ')}${categories.length > 3 ? ', dan banyak kategori lainnya' : ''}. Nonton online gratis sekarang!`}
+  siteName={nama}
+  siteUrl={url}
+  ogImage={ogImageForCategoryPage}
+  preconnectDomains={Array.from(allThumbnailDomains)}
+  keywords={pageKeywords}
+>
+  <script type="application/ld+json" set:html={JSON.stringify(schemaBreadcrumb)} />
+  <script type="application/ld+json" set:html={JSON.stringify(schemaWebPage)} />
+
+  <main class="categories-list-page">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <ol vocab="https://schema.org/" typeof="BreadcrumbList">
+        {breadcrumbs.map((item, index) => (
+          <li property="itemListElement" typeof="ListItem">
+            {index > 0 && <span class="separator" aria-hidden="true">/</span>}
+            {item.url ? (
+              <a property="item" typeof="WebPage" href={item.url}>
+                <span property="name">{item.name}</span>
+              </a>
+            ) : (
+              <span property="name">{item.name}</span>
+            )}
+            <meta property="position" content={(index + 1).toString()} />
+          </li>
+        ))}
+      </ol>
+    </nav>
+
+    <h1 class="page-title">Jelajahi Semua Kategori Video {nama} Terbaru</h1>
+
+    {categories.length === 0 ? (
+      <p class="no-categories">Tidak ada kategori video yang tersedia saat ini. Konten baru akan segera ditambahkan!</p>
+    ) : (
+      <div class="category-list">
+        {categories.map(category => (
+          <a href={`${url}/category/${category.slug}/`} class="category-item" title={`Lihat semua video di kategori ${category.name}`}>
+            {category.thumbnail && (
+              <div class="category-thumbnail-wrapper">
+                <img
+                  src={category.thumbnail}
+                  alt={`Thumbnail untuk kategori ${category.name} di ${nama}`}
+                  title={`Video ${category.name} terbaru`}
+                  loading="lazy"
+                  width="300" height="169" />
+              </div>
+            )}
+            <h2 class="category-item-title">{category.name}</h2>
+            <p class="category-item-count">{category.count} Video</p>
+          </a>
+        ))}
+      </div>
+    )}
+  </main>
+</Layout>

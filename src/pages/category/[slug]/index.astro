@@ -1,0 +1,223 @@
+---
+// src/pages/category/[slug]/index.astro
+import Layout from '../../../layouts/BaseLayout.astro';
+import VideoCard from '../../../components/VideoCard.astro';
+import { getAllVideos, type VideoData } from '../../../utils/data.ts';
+import { slugify } from '../../../utils/slugify';
+import { desk, nama, url } from '../../../utils/site';
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const allVideos: VideoData[] = await getAllVideos();
+  const videosPerPage = 40; // Sesuaikan dengan kebutuhan Anda
+
+  const paths = [];
+  const categories: { [key: string]: VideoData[] } = {};
+
+  allVideos.forEach(video => {
+    if (typeof video.category !== 'string' || video.category.trim() === '') {
+      console.warn(`[WARNING] Melewatkan video ID ${video.id || 'Unknown'} karena kategori tidak valid atau kosong: '${video.category}' di getStaticPaths (category/[slug]/index).`);
+      return;
+    }
+    if (!categories[video.category]) {
+      categories[video.category] = [];
+    }
+    categories[video.category].push(video);
+  });
+
+  for (const categoryName in categories) {
+    const categoryVideos = categories[categoryName].sort(() => 0.5 - Math.random());
+    const categorySlug = slugify(categoryName);
+    const totalPages = Math.ceil(categoryVideos.length / videosPerPage);
+
+    // Data untuk halaman 1
+    const paginatedVideosForPage1 = categoryVideos.slice(0, videosPerPage);
+
+    const preconnectDomainsForPage = new Set<string>();
+    paginatedVideosForPage1.forEach(video => {
+      try {
+        if (video.thumbnail && !video.thumbnail.includes('placeholder.webp')) {
+          preconnectDomainsForPage.add(new URL(video.thumbnail).origin);
+        }
+      } catch (e) {
+        console.error(`URL tidak valid untuk video ID "${video.id || 'Unknown'}" di kategori "${video.category}" (paginasi kategori index):`, e);
+      }
+    });
+
+    paths.push({
+      params: {
+        slug: categorySlug,
+      },
+      props: {
+        categoryName,
+        currentPage: 1, // Penting: Ini selalu halaman 1
+        totalPages,
+        videos: paginatedVideosForPage1,
+        preconnectDomains: Array.from(preconnectDomainsForPage),
+      },
+    });
+  }
+  return paths;
+}
+
+const { categoryName, currentPage, totalPages, videos: paginatedVideos, preconnectDomains } = Astro.props;
+
+// Definisi baseCategoryUrl yang konsisten
+const baseCategoryUrl = `${url}/category/${slugify(categoryName)}`;
+
+const currentUrl = `${baseCategoryUrl}/`; // URL kanonis untuk halaman 1
+const prevPageUrl = null; // Tidak ada halaman sebelumnya dari halaman 1
+const nextPageUrl = totalPages > 1 ? `${baseCategoryUrl}/2/` : null; // Link ke halaman 2
+
+let ogImageForCategoryPage = new URL('/logo.png', url).href;
+
+const firstValidVideoThumbnail = paginatedVideos.find(video =>
+  video.thumbnail && !video.thumbnail.includes('placeholder.webp')
+);
+
+if (firstValidVideoThumbnail && firstValidVideoThumbnail.thumbnail) {
+  try {
+    new URL(firstValidVideoThumbnail.thumbnail);
+    ogImageForCategoryPage = firstValidVideoThumbnail.thumbnail;
+  } catch (e) {
+    console.warn(`[WARNING] URL thumbnail untuk video pertama di kategori ${categoryName} (halaman ${currentPage}) tidak valid atau adalah placeholder, menggunakan logo.png. Video ID: ${firstValidVideoThumbnail.id || 'Unknown'}`);
+  }
+}
+
+const breadcrumbs = [
+  { name: 'Home', url: `${url}` },
+  { name: 'Kategori', url: `${url}/category/` },
+  { name: `${categoryName}` }, // Tidak perlu "Page 1" di sini
+];
+
+const schemaBreadcrumb = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": breadcrumbs.map((item, index) => ({
+    "@type": "ListItem",
+    "position": index + 1,
+    "name": item.name,
+    ...(item.url && { "item": item.url })
+  }))
+};
+
+const schemaCollectionPage = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "url": currentUrl,
+  "name": `Video ${categoryName} - ${nama}`,
+  "description": `Temukan koleksi video ${categoryName} terbaru dan terlengkap di ${nama}. Nonton online gratis.`,
+  "image": {
+    "@type": "ImageObject",
+    "url": ogImageForCategoryPage
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": currentUrl
+  },
+  "isPartOf": {
+    "@type": "CollectionPage",
+    "url": `${url}/category/${slugify(categoryName)}/`,
+    "name": `Koleksi Video ${categoryName} di ${nama}`
+  },
+  "about": {
+    "@type": "Thing",
+    "name": categoryName
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": nama,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${url}/logo.png`
+    }
+  },
+  "inLanguage": "id-ID"
+};
+
+const pageSchemas = [
+  schemaBreadcrumb,
+  schemaCollectionPage
+];
+
+const pageKeywords = `${categoryName}, video ${categoryName}, nonton ${categoryName}, ${nama}`;
+
+---
+
+<Layout
+  title={`Video ${categoryName} Terbaru | ${nama}`}
+  description={`Nonton video ${categoryName} terlengkap di ${nama}. Kumpulan video berkualitas tinggi, update rutin, dan gratis!`}
+  preconnectDomains={preconnectDomains}
+  siteUrl={url}
+  ogImage={ogImageForCategoryPage}
+  keywords={pageKeywords}
+  schemaJsonLd={pageSchemas}
+>
+
+  {prevPageUrl && <link rel="prev" href={prevPageUrl} />}
+  {nextPageUrl && <link rel="next" href={nextPageUrl} />}
+  <link rel="canonical" href={currentUrl} />
+
+  <main class="category-page" itemscope itemtype="http://schema.org/CollectionPage">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <ol vocab="https://schema.org/" typeof="BreadcrumbList">
+        {breadcrumbs.map((item, index) => (
+          <li property="itemListElement" typeof="ListItem">
+            {index > 0 && <span class="separator" aria-hidden="true">/</span>}
+            {item.url ? (
+              <a property="item" typeof="WebPage" href={item.url}>
+                <span property="name">{item.name}</span>
+              </a>
+            ) : (
+              <span property="name">{item.name}</span>
+            )}
+            <meta property="position" content={(index + 1).toString()} />
+          </li>
+        ))}
+      </ol>
+    </nav>
+
+    <h1 class="category-title-header" itemprop="headline">Nonton Video {categoryName} Terbaru</h1>
+
+    {paginatedVideos.length === 0 ? (
+      <p class="no-videos-in-category">Tidak ada video yang ditemukan dalam kategori ini. Silakan cek kategori lain atau kembali nanti.</p>
+    ) : (
+      <div class="video-grid">
+        {paginatedVideos.map((video) => (
+          <VideoCard video={video} videoDetailPath={`/${slugify(video.title)}-${video.id}`} headingLevel="h3" />
+        ))}
+      </div>
+    )}
+
+    {totalPages > 1 && (
+      <nav class="pagination" aria-label="Navigasi Page Kategori">
+        {/* Halaman 1, jadi tidak ada link "Sebelumnya" */}
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter(p =>
+            p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)
+          )
+          .map((pageNumber, index, array) => (
+            <>
+              {pageNumber > 1 && array[index - 1] && pageNumber - array[index - 1] > 1 && (
+                <span class="pagination-link ellipsis" aria-hidden="true">...</span>
+              )}
+              <a
+                href={pageNumber === 1 ? `${baseCategoryUrl}/` : `${baseCategoryUrl}/${pageNumber}/`}
+                class={`pagination-link ${pageNumber === currentPage ? 'active' : ''}`}
+                aria-current={pageNumber === currentPage ? 'page' : undefined}
+              >
+                {pageNumber}
+              </a>
+            </>
+          ))}
+        {(currentPage + 2 < totalPages && totalPages > 5 && currentPage < totalPages - 2) && (
+          <span class="pagination-link ellipsis" aria-hidden="true">...</span>
+        )}
+        {currentPage < totalPages && (
+          <a href={nextPageUrl} class="pagination-link" rel="next">Berikutnya &raquo;</a>
+        )}
+      </nav>
+    )}
+  </main>
+</Layout>

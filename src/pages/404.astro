@@ -1,0 +1,104 @@
+---
+// src/pages/404.astro
+import Layout from '../layouts/BaseLayout.astro';
+import VideoCard from '../components/VideoCard.astro';
+import { getAllVideos, type VideoData } from '../utils/data';
+import { slugify } from '../utils/slugify';
+import { nama, url, desk } from '../utils/site';
+
+export const prerender = true;
+
+const allVideos: VideoData[] = await getAllVideos();
+const numberOfRandomVideos = 16;
+const randomVideos: VideoData[] = allVideos
+  .sort(() => 0.5 - Math.random())
+  .slice(0, numberOfRandomVideos);
+
+const allDomains = new Set<string>();
+
+randomVideos.forEach(video => {
+  try {
+    if (video.thumbnail) {
+      allDomains.add(new URL(video.thumbnail).origin);
+    }
+  } catch (e) {
+    console.error(`[ERROR] URL thumbnail tidak valid untuk video ID ${video.id} (404 random videos):`, e);
+  }
+});
+const preconnectDomains = Array.from(allDomains);
+
+const breadcrumbs = [
+  { name: 'Home', url: `${url}` },
+  { name: 'Halaman Tidak Ditemukan', url: null },
+];
+
+const schemaBreadcrumb = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": breadcrumbs.map((item, index) => ({
+    "@type": "ListItem",
+    "position": index + 1,
+    "name": item.name,
+    ...(item.url && { "item": item.url }) 
+  }))
+};
+
+const pageSchemas = [
+  schemaBreadcrumb
+];
+---
+
+<Layout
+  title={`404 - Halaman Tidak Ditemukan | ${nama}`}
+  description={`Maaf, halaman yang Anda cari tidak dapat ditemukan di ${nama}.`}
+  siteName={nama}
+  preconnectDomains={preconnectDomains}
+  siteUrl={url}
+  schemaJsonLd={pageSchemas} // Kirim schema Breadcrumb ke layout
+>
+  <main class="not-found-page">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <ol>
+        {breadcrumbs.map((item, index) => (
+          <li itemprop="itemListElement" itemscope itemtype="http://schema.org/ListItem">
+            {index > 0 && <span class="separator">/</span>}
+            {item.url ? (
+              <a itemprop="item" href={item.url}>
+                <span itemprop="name">{item.name}</span>
+              </a>
+            ) : (
+              <span itemprop="name">{item.name}</span>
+            )}
+            <meta itemprop="position" content={(index + 1).toString()} />
+          </li>
+        ))}
+      </ol>
+    </nav>
+
+    <div class="not-found-content">
+      <h1 class="not-found-title">404</h1>
+      <p class="not-found-message">Maaf, halaman yang Anda cari tidak dapat ditemukan.</p>
+      <p class="not-found-suggestion">Mungkin URL-nya salah ketik atau halaman telah dipindahkan.</p>
+    </div>
+    {randomVideos.length > 0 && (
+      <section class="random-videos-section">
+        <h2 class="section-title">Video Pilihan Lainnya</h2>
+        <div class="video-grid">
+          {randomVideos.map((video) => (
+            <VideoCard video={video} videoDetailPath={`/${slugify(video.title)}-${video.id}`} />
+          ))}
+        </div>
+      </section>
+    )}
+      <a href="/" class="button-primary">Kembali ke Beranda</a>
+      
+      <div class="search-form-404">
+        <p>Atau coba cari video:</p>
+        <form action="/video/" method="get">
+          <input type="text" name="query" placeholder="Cari video..." aria-label="Cari video" />
+          <button type="submit">Cari</button>
+        </form>
+      </div>
+
+  </main>
+</Layout>

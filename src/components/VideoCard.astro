@@ -1,0 +1,49 @@
+---
+// src/components/VideoCard.astro
+import { slugify } from '../utils/slugify';
+import type { VideoData } from '../utils/data';
+import { url } from '../utils/site';
+
+export interface Props {
+  video: VideoData;
+  headingLevel?: 'h2' | 'h3';
+}
+
+const { video, headingLevel = 'h2' } = Astro.props;
+const videoSlug = slugify(video.title);
+
+const videoDetailPath = `${url}/${videoSlug}-${video.id}/`;
+---
+
+<a href={videoDetailPath} class="video-card">
+  <div class="thumbnail-container">
+    <img
+      src={video.thumbnail}
+      alt={video.title}
+      title={video.title}
+      width={video.thumbnailWidth}
+      height={video.thumbnailHeight}
+      loading="lazy"
+      class="video-thumbnail"
+    />
+    {video.previewUrl && (
+
+      <video
+        preload="none"
+        loop
+        muted
+        class="video-preview"
+        data-src={video.previewUrl}
+      >
+      </video>
+    )}
+  </div>
+  <div class="video-info">
+    {headingLevel === 'h2' ? (
+      <h2 class="video-title">{video.title}</h2>
+    ) : (
+      <h3 class="video-title">{video.title}</h3>
+    )}
+    <p class="video-category">{video.category}</p>
+  </div>
+</a>

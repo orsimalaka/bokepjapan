@@ -1,0 +1,149 @@
+---
+// src/layouts/BaseLayout.astro
+import FaviconTags from '../components/FaviconTags.astro';
+import { desk, nama, url, google, yandex } from '../utils/site';
+
+export interface Props {
+    title: string;
+    description: string;
+    preconnectDomains?: string[];
+    siteName?: string;
+    siteUrl?: string;
+    keywords?: string;
+    schemaJsonLd?: Record<string, any>[]; 
+    ogImage?: string;
+}
+
+const {
+    title,
+    description,
+    preconnectDomains = [],
+    siteName = nama,
+    siteUrl = url,
+    keywords,
+    schemaJsonLd = [], 
+    ogImage,
+} = Astro.props;
+
+const finalOgImage = ogImage || new URL(`${url}/logo.png`, url).href;
+
+const websiteSchema = {
+    "@context": "http://schema.org",
+    "@type": "WebSite",
+    "name": nama,
+    "url": url,
+    "description": desk,
+    "publisher": {
+        "@type": "Organization",
+        "name": nama,
+        "logo": {
+            "@type": "ImageObject",
+            "url": `${url}/logo.png`
+        }
+    },
+    "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": `${url}/video/{query}/`
+        },
+        "query-input": "required name=query"
+    }
+};
+
+const organizationSchema = {
+    "@context": "http://schema.org",
+    "@type": "Organization",
+    "name": nama,
+    "url": url,
+    "logo": `${url}/logo.png`,
+    "description": desk,
+    "sameAs": []
+};
+
+const baseLayoutSchemas = [
+    websiteSchema,
+    organizationSchema
+];
+
+const combinedJsonLdSchemas = [
+    ...baseLayoutSchemas,
+    ...schemaJsonLd
+];
+---
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <meta name="robots" content="index, follow" />
+        <link rel="canonical" href={Astro.url.href} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:url" content={Astro.url.href} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={siteName} />
+        <meta property="og:locale" content="id_ID" />
+        <meta property="og:image" content={finalOgImage} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={finalOgImage} />
+
+        <meta name="keywords" content={keywords || title} />
+        <meta name="google-site-verification" content={google} />
+        <meta name="yandex-verification" content={yandex} />
+        <FaviconTags />
+        {preconnectDomains.map(domain => (
+            <link rel="preconnect" href={domain} crossorigin/>
+        ))}
+        
+        {combinedJsonLdSchemas.map((schema) => (
+            <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+        ))}
+        <link rel="stylesheet" href={`${url}/global.css`} />
+        </head>
+    <body>
+        <header>
+            <nav class="main-nav">
+                <a href={url} class="logo" aria-label={`${nama} - Beranda`}>{nama}</a>
+
+                <button id="openSearch">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </button>
+
+                <div id="mobileSearchOverlay" class="mobile-search-overlay">
+                    <button type="button" id="closeSearch" class="close-search-button" aria-label="Tutup pencarian">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                    <form id="mobileSearchForm" action="/video/" method="get" class="search-form-mobile" role="search">
+                        <input type="search" name="query" placeholder="Cari video..." required autofocus />
+                        <button type="submit" aria-label="Mulai pencarian">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </button>
+                    </form>
+                </div>
+                <form id="desktopSearchForm" action="/video/" method="get" class="search-form-desktop" role="search">
+                    <input type="search" name="query" placeholder="Cari video..." required />
+                    <button type="submit" aria-label="Mulai pencarian">Cari</button>
+                </form>
+
+                <ul class="nav-links">
+                    <li><a href={`${url}/category/`}>Category</a></li>
+                    <li><a href={`${url}/tags/`}>Tags</a></li>
+                    <li>
+                        <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">☀️</button>
+                    </li>
+                </ul>
+            </nav>
+        </header>
+
+        <slot />
+        <footer>
+            <p>&copy; {new Date().getFullYear()} {nama}. All rights reserved.</p>
+        </footer>
+        <script type="text/javascript" is:inline>function slugify(text){if(!text)return'';return text.toString().toLowerCase().replace(/\s+/g,'-').replace(/[^\w-]+/g,'').replace(/--+/g,'-').replace(/^-+/,'').replace(/-+$/,'');}document.addEventListener('DOMContentLoaded',()=>{const mobileSearchForm=document.getElementById('mobileSearchForm');const desktopSearchForm=document.getElementById('desktopSearchForm');const handleSearchSubmit=(e)=>{e.preventDefault();const t=e.target.querySelector('input[name="query"]'),s=t?t.value.trim():'';if(s){const i=slugify(s);window.location.href=`/video/${i}/`;}else{window.location.href='/video/';}};if(mobileSearchForm)mobileSearchForm.addEventListener('submit',handleSearchSubmit);if(desktopSearchForm)desktopSearchForm.addEventListener('submit',handleSearchSubmit);const mobileSearchOverlay=document.getElementById('mobileSearchOverlay'),mobileSearchInput=mobileSearchForm?mobileSearchForm.querySelector('input[name="query"]'):null,closeSearchButton=document.getElementById('closeSearch'),openSearchButton=document.getElementById('openSearch');function closeOverlay(){mobileSearchOverlay.classList.remove('active');}function openOverlay(){mobileSearchOverlay.classList.add('active');if(mobileSearchInput)mobileSearchInput.focus();}if(closeSearchButton)closeSearchButton.addEventListener('click',closeOverlay);if(openSearchButton)openSearchButton.addEventListener('click',openOverlay);if(mobileSearchOverlay)mobileSearchOverlay.addEventListener('click',function(e){if(mobileSearchForm&&!mobileSearchForm.contains(e.target))closeOverlay();});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&mobileSearchOverlay&&mobileSearchOverlay.classList.contains('active'))closeOverlay();});const toggleButton=document.getElementById('darkModeToggle'),body=document.body,LIGHT_ICON='☀️',DARK_ICON='🌙',STORAGE_KEY='darkModeEnabled';function applyTheme(e){if(e){body.classList.add('dark-mode');if(toggleButton)toggleButton.textContent=DARK_ICON;}else{body.classList.remove('dark-mode');if(toggleButton)toggleButton.textContent=LIGHT_ICON;}}const savedMode=localStorage.getItem(STORAGE_KEY);if(savedMode==='true'){applyTheme(true);}else if(savedMode===null&&window.matchMedia('(prefers-color-scheme: dark)').matches){applyTheme(true);}else{applyTheme(false);}if(toggleButton)toggleButton.addEventListener('click',()=>{const e=body.classList.contains('dark-mode'),t=!e;applyTheme(t);localStorage.setItem(STORAGE_KEY,t.toString());});const placeholderImage='/placeholder.webp';document.querySelectorAll('img.video-thumbnail').forEach(e=>{e.onerror=function(){this.onerror=null;this.src=placeholderImage;};});document.querySelectorAll('video.video-preview').forEach(e=>{e.onerror=function(){this.closest('.video-card').classList.add('video-preview-error');};});document.querySelectorAll('.video-card').forEach(e=>{const t=e.querySelector('.video-preview');if(t){e.addEventListener('mouseenter',()=>{if(!e.classList.contains('video-preview-error')){const i=t.getAttribute('data-src');if(i&&t.src!==i){t.src=i;t.load();}t.play().catch(o=>{console.warn('Video playback failed, adding error class:',o);e.classList.add('video-preview-error');});}});e.addEventListener('mouseleave',()=>{if(t&&!t.paused){t.pause();t.currentTime=0;}});}});});</script>
+    </body>
+</html>

@@ -1,0 +1,196 @@
+---
+// src/pages/tags/index.astro
+import Layout from '../../layouts/BaseLayout.astro';
+import { getAllVideos, type VideoData } from '../../utils/data.ts';
+import { slugify } from '../../utils/slugify.ts';
+import { desk, nama, url } from '../../utils/site';
+export const prerender = true;
+
+const allVideos: VideoData[] = await getAllVideos();
+const uniqueTags = new Set<string>();
+allVideos.forEach(video => {
+    if (typeof video.tags === 'string') {
+        video.tags.split(',').forEach(tag => {
+            const trimmedTag = tag.trim();
+            if (trimmedTag.length > 0) {
+                uniqueTags.add(trimmedTag);
+            }
+        });
+    }
+});
+
+const filteredTags = Array.from(uniqueTags).filter(tag => {
+    const lowerCaseTag = tag.toLowerCase();
+
+    // Aturan 1: Filter tag yang mengandung "bokep" diikuti dengan:
+    // - Spasi dan satu karakter alfanumerik/simbol (misal: "bokep x", "bokep 1", "bokep -")
+    // - Spasi dan dua karakter alfanumerik (misal: "bokep xx")
+    // - Hanya "bokep" (tanpa karakter tambahan)
+    // - Spasi dan angka (misal: "bokep 123")
+    const isBokepAndSpecificRandom = /^bokep\s+[\w\d\-]{1,2}$/i.test(lowerCaseTag);
+    const isJustBokep = /^bokep$/i.test(lowerCaseTag);
+    const isBokepFollowedByNumbers = /^bokep\s+\d+$/i.test(lowerCaseTag);
+    
+    const isBokepIrrelevant = isBokepAndSpecificRandom || isJustBokep || isBokepFollowedByNumbers;
+
+    // Aturan 2: Filter tag yang hanya satu kata dan sangat panjang (misal: randomstringpanjangsekali)
+    const words = lowerCaseTag.split(/\s+/);
+    const isSingleLongRandomWord = words.length === 1 && words[0].length > 20;
+
+    // Aturan 3: Filter tag yang hanya terdiri dari angka (misal: 12345, 987654321)
+    const isOnlyNumbers = /^\d+$/.test(lowerCaseTag);
+    
+    // Aturan 4: Filter kata-kata tunggal yang umum tidak relevan atau terlalu pendek
+    const singleWordShortStopList = new Set([
+        'dan', 'atau', 'di', 'ini', 'itu', 'yang',
+        'video', 'film', 'movie', 'full', 'gratis', 'online', 'terbaru', 'download',
+        'hd', 'mp4', 'xxx', 'free', 'new', 'indo', 'indonesia', 'part', 'episode'
+    ]);
+    const isSingleWordAndInShortStopList = words.length === 1 && singleWordShortStopList.has(lowerCaseTag);
+
+    // Menggabungkan semua kondisi pengecualian
+    return !(
+        isBokepIrrelevant ||
+        isSingleLongRandomWord ||
+        isOnlyNumbers ||
+        isSingleWordAndInShortStopList
+    );
+});
+
+const sortedTags = filteredTags.sort((a, b) => a.localeCompare(b));
+
+// --- LOGIKA PAGINASI BARU UNTUK FILE INI ---
+const ITEMS_PER_PAGE_TAGS = 1000; // Jumlah tag per halaman
+const currentPage = 1; // Halaman saat ini (selalu 1 untuk index.astro)
+const totalTags = sortedTags.length;
+const totalPages = Math.ceil(totalTags / ITEMS_PER_PAGE_TAGS);
+
+// Ambil tag hanya untuk halaman saat ini
+const paginatedTags = sortedTags.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE_TAGS,
+    currentPage * ITEMS_PER_PAGE_TAGS
+);
+// --- AKHIR LOGIKA PAGINASI BARU ---
+
+const breadcrumbs = [
+    { name: 'Home', url: `${url}` },
+    { name: 'Semua Tags' },
+];
+
+const schemaBreadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": breadcrumbs.map((item, index) => ({
+        "@type": "ListItem",
+        "position": index + 1,
+        "name": item.name,
+        ...(item.url && { "item": item.url })
+    }))
+};
+
+const schemaWebPage = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "url": `${url}/tags/`,
+    "name": `Semua Tags - ${nama}`,
+    "description": `Jelajahi daftar lengkap tags dan kategori video yang tersedia di ${nama}. Temukan konten favorit Anda berdasarkan topik.`,
+    "publisher": {
+        "@type": "Organization",
+        "name": nama,
+        "logo": {
+            "@type": "ImageObject",
+            "url": `${url}/logo.png`
+        }
+    },
+    "inLanguage": "id-ID",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": `${url}/tags/`
+    }
+};
+
+const pageKeywords = `tags video, daftar tags, ${nama} tags, topik video, genre video, ${paginatedTags.slice(0, 5).join(', ')}${paginatedTags.length > 5 ? ', dll.' : ''}`;
+
+---
+
+<Layout
+    title={`Semua Tags Video - ${nama} | Jelajahi Kategori Lengkap`}
+    description={`Jelajahi daftar lengkap tags dan kategori video yang tersedia di ${nama}. Temukan konten favorit Anda berdasarkan topik dan genre. Navigasi cepat ke video yang Anda cari.`}
+    siteName={nama}
+    siteUrl={url}
+    keywords={pageKeywords}
+>
+    <script type="application/ld+json" set:html={JSON.stringify(schemaBreadcrumb)} />
+    <script type="application/ld+json" set:html={JSON.stringify(schemaWebPage)} />
+
+    <main class="tags-index-page">
+        <nav class="breadcrumb" aria-label="breadcrumb">
+            <ol vocab="https://schema.org/" typeof="BreadcrumbList">
+                {breadcrumbs.map((item, index) => (
+                    <li property="itemListElement" typeof="ListItem">
+                        {index > 0 && <span class="separator" aria-hidden="true">/</span>}
+                        {item.url ? (
+                            <a property="item" typeof="WebPage" href={item.url}>
+                                <span property="name">{item.name}</span>
+                            </a>
+                        ) : (
+                            <span property="name">{item.name}</span>
+                        )}
+                        <meta property="position" content={(index + 1).toString()} />
+                    </li>
+                ))}
+            </ol>
+        </nav>
+
+        <h1 class="page-title">Daftar Lengkap Tags Video di {nama}</h1>
+
+        {paginatedTags.length === 0 ? (
+            <p class="no-tags-message">
+                Tidak ada tags yang ditemukan. Konten sedang ditambahkan, silakan kembali nanti!
+            </p>
+        ) : (
+            <div class="tags-grid">
+                {paginatedTags.map(tag => (
+                    <a href={`${url}/video/${slugify(tag)}/`} class="tag-card" rel="tag" title={`Lihat semua video dengan tag ${tag}`}>
+                        {tag}
+                    </a>
+                ))}
+            </div>
+        )}
+
+        {/* --- KOMPONEN PAGINASI BARU --- */}
+        {totalPages > 1 && (
+            <nav class="pagination" aria-label="Tag Pagination">
+                <ul class="pagination-list">
+                    {/* Tautan untuk halaman sebelumnya (jika bukan halaman pertama) */}
+                    {currentPage > 1 && (
+                        <li class="pagination-item">
+                            <a href={`${url}/tags/${currentPage - 1 === 1 ? '' : currentPage - 1}`} class="pagination-link" aria-label="Previous Page">Sebelumnya</a> {/* <-- PERUBAHAN DI SINI: Jika halaman 1, link ke /tags/ */}
+                        </li>
+                    )}
+
+                    {/* Tautan nomor halaman */}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                        <li class="pagination-item">
+                            <a
+                                href={`${url}/tags/${page === 1 ? '' : page}`}
+                                class={`pagination-link ${page === currentPage ? 'active' : ''}`}
+                                aria-current={page === currentPage ? 'page' : undefined}
+                            >
+                                {page}
+                            </a>
+                        </li>
+                    ))}
+
+                    {/* Tautan untuk halaman selanjutnya (jika bukan halaman terakhir) */}
+                    {currentPage < totalPages && (
+                        <li class="pagination-item">
+                            <a href={`${url}/tags/${currentPage + 1}`} class="pagination-link" aria-label="Next Page">Selanjutnya</a>
+                        </li>
+                    )}
+                </ul>
+            </nav>
+        )}
+        {/* --- AKHIR KOMPONEN PAGINASI BARU --- */}
+    </main>
+</Layout>
